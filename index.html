@@ -388,6 +388,7 @@ function autoStartFromUrl(){
   } else if(role === 'office'){
     selectRole('office');
   }
+}
 
 async function apiList(){
   const res = await fetch(`${SCRIPT_URL}?action=list`);
