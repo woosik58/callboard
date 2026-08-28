@@ -1,0 +1,15 @@
+{
+  "name": "학생 호출 시스템",
+  "short_name": "학생호출",
+  "description": "교무실-교실 학생 호출 및 단체 방송 시스템",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#182338",
+  "theme_color": "#182338",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
