@@ -426,6 +426,12 @@ function fillSelect(sel, items, fmt){
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
+function studentLabel(call){
+  const parts = [];
+  if(call.number) parts.push(`${call.number}번`);
+  if(call.name) parts.push(call.name);
+  return parts.length ? parts.join(' ') : '학생';
+}
 
 /* ---------------- 역할 전환 ---------------- */
 let officePollTimer = null;
@@ -516,8 +522,8 @@ async function sendSingleCall(){
   const reason = custom || selectedChip;
   const note = document.getElementById('singleNote');
 
-  if(!number || !name || !reason){
-    note.textContent = '번호, 이름, 사유를 모두 입력해주세요.';
+  if((!number && !name) || !reason){
+    note.textContent = '번호 또는 이름 중 하나, 그리고 사유를 입력해주세요.';
     note.className = 'send-note';
     return;
   }
@@ -667,7 +673,7 @@ function renderHistory(list){
         : '<span class="status-tag wait">대기중</span>');
     const title = c.type === 'broadcast'
       ? `${escapeHtml(c.classroom)} · 단체 방송`
-      : `${escapeHtml(c.classroom)} · ${escapeHtml(c.number)}번 ${escapeHtml(c.name)}`;
+      : `${escapeHtml(c.classroom)} · ${escapeHtml(studentLabel(c))}`;
     const detail = c.type === 'broadcast' ? c.message : c.reason;
     const replyLine = c.reply ? `<div class="reply-line">↳ 교실 답장: ${escapeHtml(c.reply)}</div>` : '';
     return `<div class="call-item">
@@ -754,9 +760,9 @@ function showAlert(call){
     speechText = `${myGradeLabel} 안내 방송입니다. ${call.message}`;
   } else {
     document.getElementById('alertSiren').textContent = '📣 학 생 호 출';
-    document.getElementById('alertStudent').textContent = `${call.number}번 ${call.name}`;
+    document.getElementById('alertStudent').textContent = studentLabel(call);
     document.getElementById('alertReason').textContent = call.reason;
-    speechText = `${myGradeLabel}, ${call.number}번 ${call.name} 학생. ${call.reason}.`;
+    speechText = `${myGradeLabel}, ${studentLabel(call)} 학생. ${call.reason}.`;
   }
   lastSpeechText = speechText;
   startSiren();
