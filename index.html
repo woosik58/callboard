@@ -137,6 +137,7 @@
   }
   .o-cell.wait{background:rgba(214,69,61,0.25); border-color:var(--alert); color:#fff; animation:pulseCell 1.2s infinite;}
   .o-cell.done{background:rgba(62,142,90,0.2); border-color:var(--success); color:var(--success);}
+  .o-cell.replied{background:rgba(232,163,61,0.22); border-color:var(--amber); color:var(--amber); animation:pulseCell 1.2s infinite;}
   @keyframes pulseCell{ 0%,100%{opacity:1;} 50%{opacity:0.5;} }
 
   .call-item{
@@ -145,6 +146,7 @@
   }
   .call-item .who{font-weight:700; font-size:14px;}
   .call-item .why{color:var(--slate); font-size:12.5px; margin-top:2px;}
+  .call-item .reply-line{color:var(--amber); font-size:12.5px; margin-top:4px; font-weight:700;}
   .call-item .when{color:var(--slate); font-size:11px; margin-top:4px;}
   .status-tag{font-size:11px; padding:4px 9px; border-radius:999px; white-space:nowrap; font-weight:700;}
   .status-tag.wait{background:rgba(232,163,61,0.18); color:var(--amber);}
@@ -184,6 +186,12 @@
     background:rgba(0,0,0,0.22); border-radius:16px; padding:16px 30px; text-align:center;
     font-size:clamp(19px,3.2vw,28px); font-weight:700; max-width:86%;
   }
+  .reply-input{
+    width:min(90%, 480px); padding:14px 18px; border-radius:12px; border:2px solid rgba(255,255,255,0.35);
+    background:rgba(0,0,0,0.18); color:#fff; font-size:16px; text-align:center; font-family:inherit;
+  }
+  .reply-input::placeholder{ color:rgba(255,255,255,0.65); }
+  .reply-input:focus{ outline:none; border-color:#fff; }
   .alert-btns{display:flex; gap:12px; margin-top:6px;}
   .alert-card .ack-btn{
     padding:16px 40px; border:none; border-radius:14px;
@@ -298,6 +306,7 @@
       <div class="history-pane">
         <h3>교실별 현황</h3>
         <div class="overview-grid" id="overviewGrid"></div>
+        <div class="empty-note" style="margin:-14px 0 20px;">🔴 대기중 · 🟠 답장 있음 · 🟢 확인됨</div>
 
         <h3>최근 호출 내역</h3>
         <div id="historyList"><div class="empty-note">아직 보낸 호출이 없습니다.</div></div>
@@ -328,6 +337,7 @@
         <div class="siren" id="alertSiren">📣 학 생 호 출</div>
         <div class="student display" id="alertStudent"></div>
         <div class="reason-box" id="alertReason"></div>
+        <input class="reply-input" id="alertReplyInput" type="text" placeholder="예: 학생이 결석했습니다 (선택 입력, 교무실에 바로 보여요)">
         <div class="alert-btns">
           <button class="replay-btn" onclick="replaySpeech()">🔊 다시 듣기</button>
           <button class="ack-btn" onclick="acknowledgeCall()">확인했습니다</button>
@@ -399,8 +409,10 @@ async function apiAdd(params){
   const res = await fetch(`${SCRIPT_URL}?action=add&${qs}`);
   return res.json();
 }
-async function apiAck(id){
-  const res = await fetch(`${SCRIPT_URL}?action=ack&id=${encodeURIComponent(id)}`);
+async function apiAck(id, reply){
+  let url = `${SCRIPT_URL}?action=ack&id=${encodeURIComponent(id)}`;
+  if(reply) url += `&reply=${encodeURIComponent(reply)}`;
+  const res = await fetch(url);
   return res.json();
 }
 
@@ -631,7 +643,7 @@ function renderOverview(list){
       const key = `${g}-${r}`;
       const c = latestByRoom[key];
       let cls = '';
-      if(c) cls = c.acknowledged ? 'done' : 'wait';
+      if(c) cls = c.reply ? 'replied' : (c.acknowledged ? 'done' : 'wait');
       return `<div class="o-cell ${cls}" title="${key}">${r}</div>`;
     }).join('');
     return `<div class="overview-row"><span class="g-label">${g}학년</span><div class="overview-cells">${cells}</div></div>`;
@@ -648,17 +660,21 @@ function renderHistory(list){
   box.innerHTML = recent.map(c=>{
     const t = new Date(c.timestamp);
     const time = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0');
-    const status = c.acknowledged
-      ? '<span class="status-tag done">확인됨</span>'
-      : '<span class="status-tag wait">대기중</span>';
+    const status = c.reply
+      ? '<span class="status-tag" style="background:rgba(232,163,61,0.18);color:var(--amber);">답장 있음</span>'
+      : (c.acknowledged
+        ? '<span class="status-tag done">확인됨</span>'
+        : '<span class="status-tag wait">대기중</span>');
     const title = c.type === 'broadcast'
       ? `${escapeHtml(c.classroom)} · 단체 방송`
       : `${escapeHtml(c.classroom)} · ${escapeHtml(c.number)}번 ${escapeHtml(c.name)}`;
     const detail = c.type === 'broadcast' ? c.message : c.reason;
+    const replyLine = c.reply ? `<div class="reply-line">↳ 교실 답장: ${escapeHtml(c.reply)}</div>` : '';
     return `<div class="call-item">
       <div>
         <div class="who">${title}</div>
         <div class="why">${escapeHtml(detail)}</div>
+        ${replyLine}
         <div class="when">${time}</div>
       </div>
       ${status}
@@ -728,6 +744,7 @@ function showAlert(call){
   const card = document.getElementById('alertCard');
   card.style.display = 'flex';
   card.dataset.callId = call.id;
+  document.getElementById('alertReplyInput').value = '';
 
   let speechText;
   if(call.type === 'broadcast'){
@@ -749,12 +766,15 @@ function showAlert(call){
 async function acknowledgeCall(){
   stopSiren();
   stopSpeech();
+  const replyInput = document.getElementById('alertReplyInput');
+  const reply = replyInput.value.trim();
   document.getElementById('alertCard').style.display = 'none';
   document.getElementById('idleView').style.display = 'flex';
+  replyInput.value = '';
 
   const callId = document.getElementById('alertCard').dataset.callId;
   if(callId){
-    try{ await apiAck(callId); }catch(e){ /* 무시 - 다음 폴링에서 유지됨 */ }
+    try{ await apiAck(callId, reply); }catch(e){ /* 무시 - 다음 폴링에서 유지됨 */ }
   }
 }
 
